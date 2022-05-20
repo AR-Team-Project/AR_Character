@@ -16,6 +16,16 @@ import { Line2 } from "../node_modules/three/examples/jsm/lines/Line2.js";
 import { LineMaterial } from "../node_modules/three/examples/jsm/lines/LineMaterial.js";
 import { LineGeometry } from "../node_modules/three/examples/jsm/lines/LineGeometry.js";
 
+import Stats from "./node_modules/three/examples/jsm/libs/stats.module.js";
+
+import { GLTFLoader } from "./node_modules/three/examples/jsm/loaders/GLTFLoader.js";
+import { KTX2Loader } from "./node_modules/three/examples/jsm/loaders/KTX2Loader.js";
+import { MeshoptDecoder } from "./node_modules/three/examples/jsm/libs/meshopt_decoder.module.js";
+
+import { RoomEnvironment } from "./node_modules/three/examples/jsm/environments/RoomEnvironment.js";
+
+import { GUI } from "./node_modules/three/examples/jsm/libs/lil-gui.module.min.js";
+
 // https://www.digitalocean.com/community/tutorials/front-and-rear-camera-access-with-javascripts-getusermedia
 //let stream = await navigator.mediaDevices.getUserMedia({video: true});
 //let {width, height} = stream.getTracks()[0].getSettings();
@@ -198,6 +208,38 @@ function update_light(pos) {
 
 let camera_ar_helper = new THREE.CameraHelper(camera_ar);
 scene.add(camera_ar_helper);
+
+let mixer, blendshapeMesh;
+const ktx2Loader = new KTX2Loader()
+  .setTranscoderPath("./node_modules/three/examples/js/libs/basis/")
+  .detectSupport(renderer_ar);
+new GLTFLoader()
+  .setKTX2Loader(ktx2Loader)
+  .setMeshoptDecoder(MeshoptDecoder)
+  .load("models/gltf/facecap.glb", (gltf) => {
+    blendshapeMesh = gltf.scene.children[0];
+    blendshapeMesh.scale.set(750, 750, 750);
+    scene.add(blendshapeMesh);
+
+    mixer = new THREE.AnimationMixer(blendshapeMesh);
+
+    //mixer.clipAction(gltf.animations[0]).play();
+    console.log(gltf.animations);
+    // GUI
+    const head = blendshapeMesh.getObjectByName("mesh_2");
+    const influences = head.morphTargetInfluences;
+    console.log(head.morphTargetDictionary);
+
+    const gui = new GUI();
+    gui.close();
+    for (const [key, value] of Object.entries(head.morphTargetDictionary)) {
+      console.log(key, value);
+      gui
+        .add(influences, value, 0, 1, 0.01)
+        .name(key.replace("blendShape1.", ""))
+        .listen(influences);
+    }
+  });
 
 // https://beautifier.io/
 renderer_ar.domElement.style = "touch-action:none";
@@ -444,6 +486,7 @@ function onResults(results) {
       const center_dist = vec_cam2center.length();
 
       let oval_positions = points_faceoval.geometry.attributes.position.array;
+
       const ip_lt = new THREE.Vector3(-1, 1, -1).unproject(camera_ar);
       const ip_rb = new THREE.Vector3(1, -1, -1).unproject(camera_ar);
       const ip_diff = new THREE.Vector3().subVectors(ip_rb, ip_lt);
@@ -477,6 +520,8 @@ function onResults(results) {
       let positions = face_mesh.geometry.attributes.position.array;
       let uvs = face_mesh.geometry.attributes.uv.array;
       let p_center = new THREE.Vector3(0, 0, 0);
+      let p_ms_average = [0, 0, 0];
+
       for (let i = 0; i < landmarks.length; i++) {
         let p = landmarks[i];
         //let p_ms = new THREE.Vector3((p.x - 0.5) * 2.0, -(p.y - 0.5) * 2.0, p.z).unproject(camera_ar);
@@ -494,20 +539,96 @@ function onResults(results) {
 
         //let vec_cam2p = new THREE.Vector3().subVectors(p_ms, cam_pos);
         //return new THREE.Vector3().addVectors(cam_pos, vec_cam2p.multiplyScalar(dst_d/src_d));
-
         let pp = new THREE.Vector3().copy(p_ms);
         p_center.addVectors(p_center, pp.divideScalar(landmarks.length));
 
         positions[i * 3 + 0] = p_ms.x;
         positions[i * 3 + 1] = p_ms.y;
         positions[i * 3 + 2] = p_ms.z;
+
+        p_ms_average[0] += p_ms.x;
+        p_ms_average[1] += p_ms.y;
+        p_ms_average[2] += p_ms.z;
+
         uvs[i * 2 + 0] = p.x;
         uvs[i * 2 + 1] = -p.y + 1.0;
         //console.log(p.x +", "+p.y);
       }
+
+      p_ms_average[0] /= landmarks.length;
+      p_ms_average[1] /= landmarks.length;
+      p_ms_average[2] /= landmarks.length;
+
+      blendshapeMesh.position.set(
+        p_ms_average[0],
+        p_ms_average[1],
+        p_ms_average[2]
+      );
+
       controls.target = p_center;
       //console.log(p_center.x + ", " + p_center.y + ", " + p_center.z);
       face_mesh.geometry.computeVertexNormals();
+
+      let normal = face_mesh.geometry.getAttribute("normal");
+      let position = face_mesh.geometry.getAttribute("position");
+      let normal_vec = new THREE.Vector3(
+        normal.array[588],
+        normal.array[589],
+        normal.array[590]
+      );
+
+      let position_vec = new THREE.Vector3(
+        position.array[15],
+        position.array[16],
+        position.array[17]
+      );
+
+      let lookat = new THREE.Vector3(0, 0, 0)
+        .addVectors(normal_vec, position_vec)
+        .ceil();
+
+      lookat.y -= 10;
+      blendshapeMesh.lookAt(lookat);
+
+      function AreaOfTriangle(p1, p2, p3) {
+        var v1 = new THREE.Vector3();
+        var v2 = new THREE.Vector3();
+        v1 = p1.clone().sub(p2);
+        v2 = p1.clone().sub(p3);
+        var v3 = new THREE.Vector3();
+        v3.crossVectors(v1, v2);
+        var s = v3.length() / 2;
+        return s;
+      }
+
+      let tempVal = 0;
+      for (let i = 0; i < TRIANGULATION.length / 3; i++) {
+        let posVec1 = new THREE.Vector3(
+          position.array[TRIANGULATION[i * 3 + 0]],
+          position.array[TRIANGULATION[i * 3 + 0] + 1],
+          position.array[TRIANGULATION[i * 3 + 0] + 2]
+        );
+        let posVec2 = new THREE.Vector3(
+          position.array[TRIANGULATION[i * 3 + 1]],
+          position.array[TRIANGULATION[i * 3 + 1] + 1],
+          position.array[TRIANGULATION[i * 3 + 1] + 2]
+        );
+        let posVec3 = new THREE.Vector3(
+          position.array[TRIANGULATION[i * 3 + 2]],
+          position.array[TRIANGULATION[i * 3 + 2] + 1],
+          position.array[TRIANGULATION[i * 3 + 2] + 2]
+        );
+        tempVal += AreaOfTriangle(posVec1, posVec2, posVec3);
+      }
+
+      let blendshapeScale = Math.log(tempVal / 10000) * 100;
+
+      console.log(blendshapeScale);
+      blendshapeMesh.scale.set(
+        blendshapeScale,
+        blendshapeScale,
+        blendshapeScale
+      );
 
       //linegeometry_faceoval.setPositions(oval_positions);
       lines_faceoval.geometry.setPositions(oval_positions);
