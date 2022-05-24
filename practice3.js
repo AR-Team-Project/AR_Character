@@ -27,7 +27,7 @@ import { RoomEnvironment } from "./node_modules/three/examples/jsm/environments/
 import { GUI } from "./node_modules/three/examples/jsm/libs/lil-gui.module.min.js";
 
 import { Face } from "./node_modules/kalidokit/dist/kalidokit.es.js";
-import * as Kalidokit from "kalidokit";
+//import * as Kalidokit from "kalidokit";
 
 // https://www.digitalocean.com/community/tutorials/front-and-rear-camera-access-with-javascripts-getusermedia
 //let stream = await navigator.mediaDevices.getUserMedia({video: true});
@@ -748,27 +748,55 @@ function onResults(results) {
       lookat.y -= 10;
       blendshapeMesh.lookAt(lookat);
 
+      var vec_up = new THREE.Vector3().subVectors(landmarks[1], landmarks[197]);
+      //console.log(new THREE.Vector3().subVectors(landmarks[1], landmarks[197]));
+      blendshapeMesh.up.set(-vec_up.x, vec_up.y, vec_up.z);
+
+      // let tempVal = 0;
+      // for (let i = 0; i < TRIANGULATION.length / 3; i++) {
+      //   let posVec1 = new THREE.Vector3(
+      //     position.array[TRIANGULATION[i * 3 + 0]],
+      //     position.array[TRIANGULATION[i * 3 + 0] + 1],
+      //     position.array[TRIANGULATION[i * 3 + 0] + 2]
+      //   );
+      //   let posVec2 = new THREE.Vector3(
+      //     position.array[TRIANGULATION[i * 3 + 1]],
+      //     position.array[TRIANGULATION[i * 3 + 1] + 1],
+      //     position.array[TRIANGULATION[i * 3 + 1] + 2]
+      //   );
+      //   let posVec3 = new THREE.Vector3(
+      //     position.array[TRIANGULATION[i * 3 + 2]],
+      //     position.array[TRIANGULATION[i * 3 + 2] + 1],
+      //     position.array[TRIANGULATION[i * 3 + 2] + 2]
+      //   );
+      //   tempVal += AreaOfTriangle(posVec1, posVec2, posVec3);
+      // }
+
       let tempVal = 0;
       for (let i = 0; i < TRIANGULATION.length / 3; i++) {
         let posVec1 = new THREE.Vector3(
-          position.array[TRIANGULATION[i * 3 + 0]],
-          position.array[TRIANGULATION[i * 3 + 0] + 1],
-          position.array[TRIANGULATION[i * 3 + 0] + 2]
+          landmarks[TRIANGULATION[i * 3 + 0]].x,
+          landmarks[TRIANGULATION[i * 3 + 0]].y,
+          landmarks[TRIANGULATION[i * 3 + 0]].z
         );
         let posVec2 = new THREE.Vector3(
-          position.array[TRIANGULATION[i * 3 + 1]],
-          position.array[TRIANGULATION[i * 3 + 1] + 1],
-          position.array[TRIANGULATION[i * 3 + 1] + 2]
+          landmarks[TRIANGULATION[i * 3 + 1]].x,
+          landmarks[TRIANGULATION[i * 3 + 1]].y,
+          landmarks[TRIANGULATION[i * 3 + 1]].z
         );
         let posVec3 = new THREE.Vector3(
-          position.array[TRIANGULATION[i * 3 + 2]],
-          position.array[TRIANGULATION[i * 3 + 2] + 1],
-          position.array[TRIANGULATION[i * 3 + 2] + 2]
+          landmarks[TRIANGULATION[i * 3 + 2]].x,
+          landmarks[TRIANGULATION[i * 3 + 2]].y,
+          landmarks[TRIANGULATION[i * 3 + 2]].z
         );
         tempVal += AreaOfTriangle(posVec1, posVec2, posVec3);
       }
 
-      let blendshapeScale = Math.log(tempVal / 10000) * 100;
+      // if you use coefficient 3.2, it's really suits you well.
+      // but since I wanted to give it some marginal scale, I set coefficient as 3.6.
+      //let blendshapeScale = 3.2 * Math.sqrt(tempVal);
+      let blendshapeScale = 3.6 * Math.sqrt(tempVal);
+
       blendshapeMesh.scale.set(
         blendshapeScale,
         blendshapeScale,
